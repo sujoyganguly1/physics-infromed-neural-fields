@@ -9,6 +9,7 @@ class BurgersEquation(network.PhysicsInformedNN):
     def __init__(self, X, u, layers, lb, ub):
         super(BurgersEquation, self).__init__(X, u, layers, lb, ub)
         # settings
+        self.device = None
         self.lambda_1 = torch.tensor([0.0], requires_grad=True).to(self.device)
         self.lambda_2 = torch.tensor([-6.0], requires_grad=True).to(self.device)
 
@@ -88,7 +89,7 @@ class BurgersEquation(network.PhysicsInformedNN):
     def train(self, num_iter):
         self.dnn.train()
         for epoch in range(num_iter):
-            loss = loss_func()
+            loss = self.loss_func()
 
             # Backward and optimize
             self.optimizer_Adam.zero_grad()
