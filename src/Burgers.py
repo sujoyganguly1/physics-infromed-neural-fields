@@ -3,13 +3,13 @@
 import numpy as np
 import torch
 import network
+import scipy.io
 
 
 class BurgersEquation(network.PhysicsInformedNN):
     def __init__(self, X, u, layers, lb, ub):
         super(BurgersEquation, self).__init__(X, u, layers, lb, ub)
         # settings
-        self.device = None
         self.lambda_1 = torch.tensor([0.0], requires_grad=True).to(self.device)
         self.lambda_2 = torch.tensor([-6.0], requires_grad=True).to(self.device)
 
@@ -17,13 +17,13 @@ class BurgersEquation(network.PhysicsInformedNN):
         self.lambda_2 = torch.nn.Parameter(self.lambda_2)
 
         # deep neural networks
-        self.dnn = DNN(layers).to(self.device)
-        self.dnn.register_parameter('lambda_1', self.lambda_1)
-        self.dnn.register_parameter('lambda_2', self.lambda_2)
+        self.DNN = self.DNN(layers).to(self.device)
+        self.DNN.register_parameter('lambda_1', self.lambda_1)
+        self.DNN.register_parameter('lambda_2', self.lambda_2)
 
         # optimizers: using the same settings
         self.optimizer = torch.optim.LBFGS(
-            self.dnn.parameters(),
+            self.DNN.parameters(),
             lr=1.0,
             max_iter=50000,
             max_eval=50000,
@@ -33,11 +33,11 @@ class BurgersEquation(network.PhysicsInformedNN):
             line_search_fn="strong_wolfe"  # can be "strong_wolfe"
         )
 
-        self.optimizer_Adam = torch.optim.Adam(self.dnn.parameters())
+        self.optimizer_Adam = torch.optim.Adam(self.DNN.parameters())
         self.iter = 0
 
     def net_u(self, x, t):
-        u = self.dnn(torch.cat([x, t], dim=1))
+        u = self.DNN(torch.cat([x, t], dim=1))
         return u
 
     def net_f(self, x, t):
@@ -87,7 +87,7 @@ class BurgersEquation(network.PhysicsInformedNN):
         return loss
 
     def train(self, num_iter):
-        self.dnn.train()
+        self.DNN.train()
         for epoch in range(num_iter):
             loss = self.loss_func()
 
@@ -114,9 +114,40 @@ class BurgersEquation(network.PhysicsInformedNN):
         x = torch.tensor(X[:, 0:1], requires_grad=True).float().to(self.device)
         t = torch.tensor(X[:, 1:2], requires_grad=True).float().to(self.device)
 
-        self.dnn.eval()
+        self.DNN.eval()
         u = self.net_u(x, t)
         f = self.net_f(x, t)
         u = u.detach().cpu().numpy()
         f = f.detach().cpu().numpy()
         return u, f
+
+def load_burgers_data(path_to_data='../data/burgers_shock.mat'):
+    data = scipy.io.loadmat(path_to_data)
+
+    t = data['t'].flatten()[:, None]
+    x = data['x'].flatten()[:, None]
+    Exact = np.real(data['usol']).T
+
+    X, T = np.meshgrid(x, t)
+
+    X_star = np.hstack((X.flatten()[:, None], T.flatten()[:, None]))
+    u_star = Exact.flatten()[:, None]
+
+    # boundary conditions
+    lb = X_star.min(0)
+    ub = X_star.max(0)
+    return X_star, u_star, lb, ub
+
+if __name__ == "__main__":
+    nu = 0.01 / np.pi
+    N_u = 2000
+    layers = [2, 20, 20, 20, 20, 20, 20, 20, 20, 1]
+    # create training set
+    X_star, u_star, lb, ub = load_burgers_data()
+    idx = np.random.choice(X_star.shape[0], N_u, replace=False)
+    X_u_train = X_star[idx, :]
+    u_train = u_star[idx, :]
+
+    # training
+    model = BurgersEquation(X_u_train, u_train, layers, lb, ub)
+    model.train(0)

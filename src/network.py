@@ -41,11 +41,11 @@ class DNN(torch.nn.Module):
         return out
 
 
-class PhysicsInformedNN(object):
+class PhysicsInformedNN(DNN):
     __metaclass__ = abc.ABCMeta
 
     def __init__(self, X, u, layers, lb, ub):
-
+        super().__init__(layers)
         # boundary conditions
         self.lb = torch.tensor(lb).float().to(self.device)
         self.ub = torch.tensor(ub).float().to(self.device)
@@ -63,13 +63,13 @@ class PhysicsInformedNN(object):
         self.lambda_2 = torch.nn.Parameter(self.lambda_2)
 
         # deep neural networks
-        self.dnn = DNN(layers).to(self.device)
-        self.dnn.register_parameter('lambda_1', self.lambda_1)
-        self.dnn.register_parameter('lambda_2', self.lambda_2)
+        self.DNN = DNN(layers).to(self.device)
+        self.DNN.register_parameter('lambda_1', self.lambda_1)
+        self.DNN.register_parameter('lambda_2', self.lambda_2)
 
         # optimizers: using the same settings
         self.optimizer = torch.optim.LBFGS(
-            self.dnn.parameters(),
+            self.DNN.parameters(),
             lr=1.0,
             max_iter=50000,
             max_eval=50000,
@@ -79,7 +79,7 @@ class PhysicsInformedNN(object):
             line_search_fn="strong_wolfe"  # can be "strong_wolfe"
         )
 
-        self.optimizer_Adam = torch.optim.Adam(self.dnn.parameters())
+        self.optimizer_Adam = torch.optim.Adam(self.DNN.parameters())
         self.iter = 0
 
         @abc.abstractmethod
