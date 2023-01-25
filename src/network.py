@@ -8,13 +8,7 @@ import numpy as np
 
 class DNN(torch.nn.Module):
     def __init__(self, layers):
-        # CUDA support
-        if torch.cuda.is_available():
-            self.device = torch.device('cuda')
-        else:
-            self.device = torch.device('cpu')
         super(DNN, self).__init__()
-
         # parameters
         self.depth = len(layers) - 1
 
@@ -41,46 +35,16 @@ class DNN(torch.nn.Module):
         return out
 
 
-class PhysicsInformedNN(DNN):
+class PhysicsInformedNN():
     __metaclass__ = abc.ABCMeta
-
-    def __init__(self, X, u, layers, lb, ub):
-        super().__init__(layers)
-        # boundary conditions
-        self.lb = torch.tensor(lb).float().to(self.device)
-        self.ub = torch.tensor(ub).float().to(self.device)
-
+    def __init__(self, X, u, layers, device='cpu'):
+        self.device = device
         # data
         self.x = torch.tensor(X[:, 0:1], requires_grad=True).float().to(self.device)
         self.t = torch.tensor(X[:, 1:2], requires_grad=True).float().to(self.device)
         self.u = torch.tensor(u).float().to(self.device)
 
-        # settings
-        self.lambda_1 = torch.tensor([0.0], requires_grad=True).to(self.device)
-        self.lambda_2 = torch.tensor([-6.0], requires_grad=True).to(self.device)
-
-        self.lambda_1 = torch.nn.Parameter(self.lambda_1)
-        self.lambda_2 = torch.nn.Parameter(self.lambda_2)
-
-        # deep neural networks
-        self.DNN = DNN(layers).to(self.device)
-        self.DNN.register_parameter('lambda_1', self.lambda_1)
-        self.DNN.register_parameter('lambda_2', self.lambda_2)
-
-        # optimizers: using the same settings
-        self.optimizer = torch.optim.LBFGS(
-            self.DNN.parameters(),
-            lr=1.0,
-            max_iter=50000,
-            max_eval=50000,
-            history_size=50,
-            tolerance_grad=1e-5,
-            tolerance_change=1.0 * np.finfo(float).eps,
-            line_search_fn="strong_wolfe"  # can be "strong_wolfe"
-        )
-
-        self.optimizer_Adam = torch.optim.Adam(self.DNN.parameters())
-        self.iter = 0
+        self.dnn = DNN(layers).to(self.device)
 
         @abc.abstractmethod
         def net_u(self, x, t):
